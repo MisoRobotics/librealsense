@@ -2,13 +2,32 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Linq;
 
 namespace Intel.RealSense
 {
     public class FrameSet : IDisposable, IEnumerable<Frame>
     {
         internal HandleRef m_instance;
+        readonly int m_count;
+
+        public Frame AsFrame()
+        {
+            object error;
+            NativeMethods.rs2_frame_add_ref(m_instance.Handle, out error);
+            return CreateFrame(m_instance.Handle);
+        }
+
+        public static FrameSet FromFrame(Frame composite, FramesReleaser releaser = null)
+        {
+            object error;
+            if (NativeMethods.rs2_is_frame_extendable_to(composite.m_instance.Handle, 
+                Extension.CompositeFrame, out error) > 0)
+            {
+                NativeMethods.rs2_frame_add_ref(composite.m_instance.Handle, out error);
+                return FramesReleaser.ScopedReturn(releaser, new FrameSet(composite.m_instance.Handle));
+            }
+            throw new Exception("The frame is a not composite frame");
+        }
 
         internal static Frame CreateFrame(IntPtr ptr)
         {
@@ -23,11 +42,22 @@ namespace Intel.RealSense
                 return new Frame(ptr);
         }
 
+        public T FirstOrDefault<T>(Stream stream) where T : Frame
+        {
+            foreach (Frame frame in this)
+            {
+                if (frame.Profile.Stream == stream)
+                    return frame as T;
+                frame.Dispose();
+            }
+            return null;
+        }
+
         public DepthFrame DepthFrame
         {
             get
             {
-                return this.FirstOrDefault(x => x.Profile.Stream == Stream.Depth) as DepthFrame;
+                return FirstOrDefault<DepthFrame>(Stream.Depth);
             }
         }
 
@@ -35,16 +65,14 @@ namespace Intel.RealSense
         {
             get
             {
-                return this.FirstOrDefault(x => x.Profile.Stream == Stream.Color) as VideoFrame;
+                return FirstOrDefault<VideoFrame>(Stream.Color);
             }
         }
 
         public IEnumerator<Frame> GetEnumerator()
         {
             object error;
-
-            int deviceCount = NativeMethods.rs2_embedded_frames_count(m_instance.Handle, out error);
-            for (int i = 0; i < deviceCount; i++)
+            for (int i = 0; i < m_count; i++)
             {
                 var ptr = NativeMethods.rs2_extract_frame(m_instance.Handle, i, out error);
                 yield return CreateFrame(ptr);
@@ -60,9 +88,7 @@ namespace Intel.RealSense
         {
             get
             {
-                object error;
-                int deviceCount = NativeMethods.rs2_embedded_frames_count(m_instance.Handle, out error);
-                return deviceCount;
+                return m_count;
             }
         }
 
@@ -76,9 +102,26 @@ namespace Intel.RealSense
             }
         }
 
-        public FrameSet(IntPtr ptr)
+        public Frame this[Stream stream, int index = 0]
+        {
+            get
+            {
+                foreach (Frame frame in this)
+                {
+                    var p = frame.Profile;
+                    if (p.Stream == stream && p.Index == index)
+                        return frame;
+                    frame.Dispose();
+                }
+                return null;
+            }
+        }
+
+        internal FrameSet(IntPtr ptr)
         {
             m_instance = new HandleRef(this, ptr);
+            object error;
+            m_count = NativeMethods.rs2_embedded_frames_count(m_instance.Handle, out error);
         }
 
         #region IDisposable Support
@@ -123,9 +166,7 @@ namespace Intel.RealSense
                 NativeMethods.rs2_release_frame(m_instance.Handle);
             m_instance = new HandleRef(this, IntPtr.Zero);
         }
-
     }
-
 
     class FrameSetMarshaler : ICustomMarshaler
     {

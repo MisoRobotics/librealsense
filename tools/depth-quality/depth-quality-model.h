@@ -311,9 +311,6 @@ namespace rs2
             void stop_record(device_model* dev)
             {
                 _recorder.stop_record(dev);
-
-                
-               
             }
         private:
             metrics_model(const metrics_model&);
@@ -366,6 +363,7 @@ namespace rs2
 
             void on_frame(callback_type callback) { _metrics_model.callback = callback; }
 
+            float get_depth_scale() const { return _metrics_model._depth_scale_units; }
             rs2::device get_active_device(void) const;
 
         private:

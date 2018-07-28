@@ -63,7 +63,7 @@ namespace rs2
             {
                 rs2::config cfg_alt;
                 cfg_alt.enable_stream(RS2_STREAM_DEPTH, 0, 0, 0, RS2_FORMAT_Z16, requested_fps);
-                cfg_alt.enable_stream(RS2_STREAM_INFRARED, 1, 0, 0, RS2_FORMAT_Y8, requested_fps);
+                cfg_alt.enable_stream(RS2_STREAM_INFRARED, 0, 0, 0, RS2_FORMAT_Y8, requested_fps);
                 cfgs.emplace_back(cfg_alt);
             }
 
@@ -78,6 +78,7 @@ namespace rs2
                     }
                     catch (...)
                     {
+                        _pipe.stop();
                         valid_config = false;
                         if (!_device_in_use)
                         {
@@ -480,8 +481,8 @@ namespace rs2
                     win,
                     _error_message, device_to_remove, _viewer_model, windows_width,
                     _update_readonly_options_timer,
-                    draw_later, true, 
-                    [&](std::function<void()>func) 
+                    draw_later, true,
+                    [&](std::function<void()>func)
                     {
                         auto profile =_pipe.get_active_profile();
                         _pipe.stop();
@@ -497,7 +498,7 @@ namespace rs2
                         _pipe.start(cfg);
 
                         json_loaded = true;
-                    }, 
+                    },
                     false);
 
                 if (json_loaded)
@@ -617,7 +618,7 @@ namespace rs2
                         ImGui::Text("Distance:");
                         if (ImGui::IsItemHovered())
                         {
-                            ImGui::SetTooltip("Estimated distance to the wall in mm");
+                            ImGui::SetTooltip("Estimated distance to an average within the ROI of the target (wall) in mm");
                         }
                         ImGui::SameLine(); ImGui::SetCursorPosX(col1);
                         ImGui::Text("%.2f mm", _metrics_model.get_last_metrics().distance);
@@ -703,7 +704,7 @@ namespace rs2
                                 ImGui::SetTooltip("Save Metrics snapshot. This will create:\nPNG image with the depth frame\nPLY 3D model with the point cloud\nJSON file with camera settings you can load later\nand a CSV with metrics recent values");
                             }
                         }
-                       
+
                         ImGui::PopStyleColor(2);
 
                         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 5);
@@ -764,6 +765,7 @@ namespace rs2
             _device_model->show_stream_selection = false;
             _depth_sensor_model = std::shared_ptr<rs2::subdevice_model>(
                 new subdevice_model(dev, dpt_sensor, _error_message));
+
             _depth_sensor_model->draw_streams_selector = false;
             _depth_sensor_model->draw_fps_selector = true;
 
@@ -921,7 +923,7 @@ namespace rs2
                             }
 
                             std::tie(gt_mm, plane_fit_set) = get_inputs();
-                           
+
                             auto metrics = analyze_depth_image(f, su, baseline, &intrin, roi, gt_mm, plane_fit_set, sample, _recorder.is_recording(), callback);
 
                             {
@@ -929,7 +931,6 @@ namespace rs2
                                 _latest_metrics = metrics;
                             }
                         }
-                       
                     }
                     if (_recorder.is_recording())
                         _recorder.add_sample(frames, std::move(sample));
@@ -1139,7 +1140,6 @@ namespace rs2
 
         void metrics_recorder::record_frames(const frameset& frames)
         {
-           
             // Trim the file extension when provided. Note that this may amend user-provided file name in case it uses the "." character, e.g. "my.file.name"
             auto filename_base = _filename_base;
 
@@ -1203,7 +1203,6 @@ namespace rs2
                 if (ply_texture )
                     export_to_ply(filename_base + "_" + fn.str() + "_3d_mesh.ply", _viewer_model.not_model, frames, ply_texture, false);
             }
-            
         }
 
      }
